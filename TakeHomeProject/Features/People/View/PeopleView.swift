@@ -16,9 +16,9 @@ struct PeopleView: View {
     //    @State private var users: [User] = []
     @State private var shouldShowCreate = false
     @State private var shouldShowSuccess = false
+    @State private var viewHasAppeared = false
     
     var body: some View {
-        NavigationStack {
             ZStack {
                 Theme.background
                     .ignoresSafeArea(edges: .top)
@@ -33,12 +33,24 @@ struct PeopleView: View {
                                 NavigationLink {
                                     DetailView(userId: user.id)
                                 } label: {
-                                    PersonItemView(user: user)
+                                    PersonItemView(user: user).task {
+                                        if vm.hasReachedEnd(of: user) && !vm.isFetching {
+                                           await vm.fetchNextSetOfUsers()
+                                        }
+                                    }
                                 }
                                 
                             }
                         }
                         .padding()
+                    }
+                    .refreshable(action: {
+                       await vm.fetchUsers()
+                    })
+                    .overlay(alignment: .bottom) {
+                        if vm.isFetching {
+                            ProgressView()
+                        }
                     }
                 }
             }
@@ -52,12 +64,27 @@ struct PeopleView: View {
                     }
                     .disabled(vm.isLoading)
                 }
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        Task {
+                            await vm.fetchUsers()
+                        }
+                    } label: {
+                        Symbols.refresh.font(.system(.subheadline,design: .rounded)).bold()
+                    }
+                    .disabled(vm.isLoading)
+                }
             }
-            .onAppear{
-                vm.fetchUsers()
+            .task{
+                if !viewHasAppeared {
+                    await vm.fetchUsers()
+                    viewHasAppeared = true
+                }
+                
             }
             .sheet(isPresented: $shouldShowCreate) {
                 CreateView {
+                    haptic(.success)
                     withAnimation(.spring().delay(0.25)) {
                         shouldShowSuccess = true
                     }
@@ -65,7 +92,9 @@ struct PeopleView: View {
             }
             .alert(isPresented: $vm.hasError, error: vm.error) {
                 Button("Retry") {
-                    vm.fetchUsers()
+                    Task {
+                        await vm.fetchUsers()
+                    }
                 }
             }
             .overlay {
@@ -81,7 +110,8 @@ struct PeopleView: View {
                         }
                 }
             }
-        }
+            .embedInNavigation()
+        
     }
 }
 

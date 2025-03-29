@@ -15,21 +15,21 @@ final class DetailsViewModel: ObservableObject {
     @Published var hasError = false
     @Published private(set) var isLoading = false
     
-    func fetchDetails(for id: Int) {
+    @MainActor
+    func fetchDetails(for id: Int) async {
         isLoading = true
-        NetworkingManager.shared.request("https://reqres.in/api/users/\(id)?delay=3", type: UserDetailResponse.self) { [weak self] res in
-            DispatchQueue.main.async {
-                defer {self?.isLoading = false }
-                switch res {
-                case .success(let response):
-                    self?.userInfo = response
-                case .failure(let error):
-                    self?.hasError = true
-                    self?.error = error as? NetworkingManager.NetworkingError
-                    
-                }
+        defer { isLoading = false}
+        
+        do {
+            let response = try await NetworkingManager.shared.request(.detail(id: id), type: UserDetailResponse.self)
+            self.userInfo = response
+        } catch {
+            if let networkingError = error as? NetworkingManager.NetworkingError {
+                self.hasError = true
+                self.error = networkingError
+            } else {
+                self.error = .custom(error: error)
             }
-            
         }
     }
 }
